@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Server Finder</title>
+<style>
+  :root {
+    --bg: #10151b; --panel: #18202a; --line: #2a3542;
+    --text: #e9eef3; --muted: #8b98a6; --go: #3ddc97; --go-ink: #07261a; --warn: #f2b84b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  body { padding: 16px 14px 48px; max-width: 560px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 4px 0 14px; font-weight: 700; letter-spacing: .2px; }
+  .row-in { display: flex; gap: 8px; }
+  input[type=text] { flex: 1; min-width: 0; padding: 12px; font-size: 16px; color: var(--text);
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+  button { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 10px 14px; cursor: pointer; }
+  button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid var(--go); outline-offset: 2px; }
+  .primary { background: var(--go); color: var(--go-ink); border-color: var(--go); font-weight: 700; }
+  .hint { color: var(--muted); font-size: 13px; margin: 8px 2px 0; line-height: 1.4; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .chip { padding: 6px 10px; font-size: 13px; border-radius: 999px; }
+  .results { margin-top: 10px; display: grid; gap: 6px; }
+  .results button { text-align: left; }
+  .game { margin-top: 16px; padding: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+  .game b { font-size: 17px; display: block; }
+  .game span { color: var(--muted); font-size: 13px; }
+  .ctrls { display: grid; gap: 10px; margin-top: 12px; }
+  .ctrl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .ctrl label { color: var(--muted); font-size: 13px; width: 86px; }
+  .seg { display: flex; gap: 6px; flex-wrap: wrap; }
+  .seg button { padding: 7px 12px; font-size: 14px; }
+  .seg button[aria-pressed=true] { background: var(--text); color: var(--bg); border-color: var(--text); font-weight: 700; }
+  .status { display: flex; justify-content: space-between; align-items: center; margin: 16px 2px 8px; font-size: 13px; color: var(--muted); }
+  .bar { height: 3px; background: var(--line); border-radius: 3px; overflow: hidden; margin-bottom: 10px; }
+  .bar i { display: block; height: 100%; width: 0; background: var(--go); transition: width 1s linear; }
+  .list { display: grid; gap: 8px; }
+  .srv { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 12px; }
+  .srv .n { font-size: 26px; font-weight: 800; min-width: 54px; font-variant-numeric: tabular-nums; }
+  .srv .n small { font-size: 12px; font-weight: 500; color: var(--muted); }
+  .srv .m { flex: 1; color: var(--muted); font-size: 13px; line-height: 1.5; }
+  .av { display: flex; gap: 4px; margin-top: 6px; }
+  .av img, .av i { width: 30px; height: 30px; border-radius: 50%; background: var(--line); display: block; }
+  .join { text-decoration: none; background: var(--go); color: var(--go-ink); font-weight: 800;
+    padding: 11px 18px; border-radius: 10px; }
+  .msg { padding: 14px; border: 1px dashed var(--line); border-radius: 12px; color: var(--muted); font-size: 14px; line-height: 1.5; }
+  .msg.err { color: var(--warn); border-color: var(--warn); }
+  [hidden] { display: none !important; }
+  @media (prefers-reduced-motion: reduce) { .bar i { transition: none; } }
+</style>
+</head>
+<body>
+  <h1>Server Finder</h1>
+
+  <div class="row-in">
+    <input id="q" type="text" inputmode="search" placeholder="Game name, link or place ID" autocomplete="off">
+    <button id="go" class="primary">Find</button>
+  </div>
+  <p class="hint">Paste a Roblox game link or ID, or type a game name to search.</p>
+  <div id="saved" class="chips"></div>
+  <div id="results" class="results"></div>
+
+  <section id="game" class="game" hidden>
+    <b id="gname"></b>
+    <span id="gid"></span>
+    <div class="ctrls">
+      <div class="ctrl"><label>Max players</label>
+        <div class="seg" id="segPlayers">
+          <button data-v="1">1</button><button data-v="2">2</button><button data-v="3">3</button><button data-v="0">Any</button>
+        </div></div>
+      <div class="ctrl"><label>Max ping</label>
+        <div class="seg" id="segPing">
+          <button data-v="0">Any</button><button data-v="100">100</button><button data-v="150">150</button><button data-v="200">200</button>
+        </div></div>
+      <div class="ctrl"><label>Refresh</label>
+        <div class="seg" id="segInt">
+          <button data-v="10">10s</button><button data-v="15">15s</button><button data-v="20">20s</button>
+        </div>
+        <button id="pause" style="margin-left:auto">Pause</button></div>
+    </div>
+  </section>
+
+  <div id="statusWrap" hidden>
+    <div class="status"><span id="status">Loading</span><button id="now" style="padding:6px 10px;font-size:13px">Refresh now</button></div>
+    <div class="bar"><i id="barfill"></i></div>
+    <div id="list" class="list"></div>
+    <p class="hint">The player count comes from Roblox and can be 10 to 20 seconds old, so a server shown with 1 player may already have more. If it does, go back and tap the next one. The small circles are the players inside. Default-looking avatars are often new accounts, but that is only a guess. Ping is the ping of the players already inside, so it does not prove the server is in India. Check the ping after you join.</p>
+  </div>
+
+<script>
+const $ = s => document.querySelector(s);
+const API = "/.netlify/functions/servers";
+const S = { placeId: null, name: "", maxPlayers: 1, maxPing: 0, interval: 15, paused: false, left: 0, servers: [], busy: false, error: "", updated: 0, av: {}, avTried: new Set() };
+
+// ---------- storage (safe) ----------
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+};
+let saved = store.get("sf_games", []);
+
+function renderSaved() {
+  $("#saved").innerHTML = "";
+  saved.forEach(g => {
+    const b = document.createElement("button");
+    b.className = "chip"; b.textContent = g.name;
+    b.onclick = () => selectGame(g.placeId, g.name);
+    $("#saved").appendChild(b);
+  });
+}
+
+// ---------- game selection ----------
+function parseInput(t) {
+  t = t.trim();
+  const m = t.match(/games\/(\d{3,15})/) || t.match(/placeId=(\d{3,15})/);
+  if (m) return { id: m[1] };
+  if (/^\d{3,15}$/.test(t)) return { id: t };
+  return { search: t };
+}
+
+async function api(qs) {
+  const r = await fetch(API + "?" + qs);
+  let j = {};
+  try { j = await r.json(); } catch (e) {}
+  if (!r.ok) throw new Error(j.error || "http_" + r.status);
+  return j;
+}
+
+async function onFind() {
+  const p = parseInput($("#q").value);
+  $("#results").innerHTML = "";
+  if (p.id) return selectGame(p.id);
+  if (p.search.length < 2) return;
+  $("#results").innerHTML = '<div class="msg">Searching</div>';
+  try {
+    const j = await api("action=search&q=" + encodeURIComponent(p.search));
+    $("#results").innerHTML = "";
+    if (!j.results.length) { $("#results").innerHTML = '<div class="msg">No games found. Try pasting the game link instead.</div>'; return; }
+    j.results.forEach(g => {
+      const b = document.createElement("button");
+      b.textContent = g.name + (g.playing != null ? "  (" + g.playing.toLocaleString() + " playing)" : "");
+      b.onclick = () => { $("#results").innerHTML = ""; selectGame(g.placeId, g.name); };
+      $("#results").appendChild(b);
+    });
+  } catch (e) {
+    $("#results").innerHTML = '<div class="msg err">Search did not work. Open the game on roblox.com, copy its link and paste it above.</div>';
+  }
+}
+
+async function selectGame(placeId, name) {
+  S.placeId = placeId; S.name = name || "Loading game"; S.servers = []; S.error = "";
+  $("#game").hidden = false; $("#statusWrap").hidden = false;
+  $("#gname").textContent = S.name; $("#gid").textContent = "Place ID " + placeId;
+  $("#list").innerHTML = ""; $("#status").textContent = "Loading servers";
+  if (!name) {
+    try { const i = await api("action=info&placeId=" + placeId); S.name = i.name; $("#gname").textContent = i.name; } catch (e) {}
+  }
+  saved = saved.filter(g => g.placeId !== placeId);
+  saved.unshift({ placeId, name: S.name });
+  saved = saved.slice(0, 8); store.set("sf_games", saved); renderSaved();
+  refresh();
+}
+
+// ---------- servers ----------
+async function refresh() {
+  if (!S.placeId || S.busy) return;
+  S.busy = true; $("#status").textContent = "Refreshing";
+  try {
+    const j = await api("action=servers&placeId=" + S.placeId);
+    S.servers = j.servers; S.error = ""; S.updated = Date.now(); S.left = S.interval; S.avTried.clear();
+  } catch (e) {
+    S.error = e.message === "rate_limited"
+      ? "Roblox is limiting requests. Retrying in a moment."
+      : "Could not load servers. Retrying in a moment.";
+    S.left = 25;
+  }
+  S.busy = false; render();
+}
+
+function render() {
+  const list = $("#list"); list.innerHTML = "";
+  if (S.error) { const d = document.createElement("div"); d.className = "msg err"; d.textContent = S.error; list.appendChild(d); }
+  let rows = S.servers.filter(s => (S.maxPlayers === 0 || s.playing <= S.maxPlayers) &&
+    (S.maxPing === 0 || (s.ping != null && s.ping <= S.maxPing)));
+  rows.sort((a, b) => a.playing - b.playing || (a.ping ?? 9999) - (b.ping ?? 9999));
+  rows = rows.slice(0, 25);
+  if (!rows.length && !S.error) {
+    const d = document.createElement("div"); d.className = "msg";
+    d.textContent = S.servers.length
+      ? "No server matches these filters right now. Try 2 players or Any ping, or wait for the next refresh."
+      : "No public servers found for this game.";
+    list.appendChild(d);
+  }
+  rows.forEach(s => {
+    const el = document.createElement("div"); el.className = "srv";
+    el.innerHTML = '<div class="n">' + s.playing + '<small> / ' + s.maxPlayers + '</small></div>' +
+      '<div class="m">Ping ' + (s.ping != null ? Math.round(s.ping) + ' ms' : 'unknown') +
+      '<br>' + (s.fps != null ? s.fps + ' fps' : 'fps unknown') + '</div>';
+    const a = document.createElement("a");
+    a.className = "join"; a.textContent = "Join";
+    a.href = "roblox://experiences/start?placeId=" + S.placeId + "&gameInstanceId=" + s.id;
+    const av = document.createElement("div"); av.className = "av";
+    (s.playerTokens || []).forEach(t => {
+      if (S.av[t]) { const im = document.createElement("img"); im.src = S.av[t]; im.alt = "Player avatar"; im.loading = "lazy"; av.appendChild(im); }
+      else av.appendChild(document.createElement("i"));
+    });
+    el.querySelector(".m").appendChild(av);
+    el.appendChild(a); list.appendChild(el);
+  });
+  loadAvatars(rows);
+  updateStatus();
+}
+
+async function loadAvatars(rows) {
+  const need = [];
+  rows.slice(0, 15).forEach(s => (s.playerTokens || []).forEach(t => {
+    if (!S.av[t] && !S.avTried.has(t)) { need.push(t); S.avTried.add(t); }
+  }));
+  if (!need.length) return;
+  try {
+    const r = await fetch(API + "?action=avatars", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tokens: need }) });
+    const j = await r.json();
+    if (r.ok && j.avatars) { Object.assign(S.av, j.avatars); render(); }
+  } catch (e) {}
+}
+
+function updateStatus() {
+  if (S.busy) return;
+  $("#status").textContent = S.paused ? "Paused" : "Next refresh in " + Math.max(S.left, 0) + "s";
+  $("#barfill").style.width = S.paused ? "0" : Math.min(100, ((S.interval - S.left) / S.interval) * 100) + "%";
+}
+
+setInterval(() => {
+  if (!S.placeId || S.paused || S.busy || document.hidden) return;
+  S.left -= 1;
+  if (S.left <= 0) refresh(); else updateStatus();
+}, 1000);
+
+// ---------- controls ----------
+function seg(id, key, num) {
+  const box = $(id);
+  const mark = () => box.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.v === S[key])));
+  box.querySelectorAll("button").forEach(b => b.onclick = () => {
+    S[key] = +b.dataset.v; mark(); store.set("sf_" + key, S[key]);
+    if (key === "interval") S.left = Math.min(S.left, S.interval);
+    render();
+  });
+  mark();
+}
+["maxPlayers", "maxPing", "interval"].forEach(k => { const v = store.get("sf_" + k, null); if (v !== null) S[k] = v; });
+seg("#segPlayers", "maxPlayers"); seg("#segPing", "maxPing"); seg("#segInt", "interval");
+
+$("#pause").onclick = () => { S.paused = !S.paused; $("#pause").textContent = S.paused ? "Resume" : "Pause"; updateStatus(); };
+$("#now").onclick = refresh;
+$("#go").onclick = onFind;
+$("#q").addEventListener("keydown", e => { if (e.key === "Enter") onFind(); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden && S.placeId && S.left < 3) refresh(); });
+
+renderSaved();
+</script>
+</body>
+</html>
